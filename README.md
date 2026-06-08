@@ -31,15 +31,15 @@ export FTIRFUN_API_TIMEOUT_SECONDS="120"
 ```bash
 python -m venv .venv
 . .venv/bin/activate
-pip install -r requirements.txt
-python ftirfun_mcp_server.py
+pip install .
+ftirfun-mcp
 ```
 
 ## Run Streamable HTTP
 
 ```bash
 FTIRFUN_API_KEY="your-ftirfun-api-key" \
-python ftirfun_mcp_server.py --transport streamable-http --host 127.0.0.1 --port 8001
+ftirfun-mcp --transport streamable-http --host 127.0.0.1 --port 8001
 ```
 
 ## Docker

@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ftirfun-mcp"
+version = "0.1.0"
+description = "Public MCP wrapper for the hosted FTIR.fun spectral-library API."
+readme = "README.md"
+license = { file = "LICENSE" }
+authors = [
+  { name = "Lin", email = "ftir.fun@outlook.com" }
+]
+requires-python = ">=3.10"
+dependencies = [
+  "mcp>=1.0.0",
+  "httpx>=0.27.0",
+  "pydantic>=2.9.0",
+]
+keywords = ["mcp", "ftir", "spectroscopy", "api"]
+classifiers = [
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Topic :: Scientific/Engineering :: Chemistry",
+  "Topic :: Software Development :: Libraries :: Python Modules",
+]
+
+[project.urls]
+Homepage = "https://ftir.fun"
+Repository = "https://github.com/jxbaoxiaodong/ftirfun-mcp"
+
+[project.scripts]
+ftirfun-mcp = "ftirfun_mcp_server:main"
+
+[tool.setuptools]
+py-modules = ["ftirfun_mcp_server"]
