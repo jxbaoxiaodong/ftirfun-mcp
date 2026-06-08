@@ -1,5 +1,7 @@
 # FTIR.fun MCP Server
 
+[![smithery badge](https://smithery.ai/badge/hlin2097/ftirfun)](https://smithery.ai/servers/hlin2097/ftirfun)
+
 MCP wrapper for the hosted FTIR.fun spectral-library API.
 
 This repository is intentionally small and public. It does not contain the private FTIR.fun web application, spectral-library data, API keys, user data, or institutional AI-only report-review logic.
@@ -71,3 +73,7 @@ https://ftir.fun/mcp
 ```
 
 The hosted endpoint is the canonical production service. This public repository is the small open-source MCP wrapper used for public MCP registries and self-hosted client installs.
+
+## Registry Links
+
+- Smithery: https://smithery.ai/servers/hlin2097/ftirfun
