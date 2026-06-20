@@ -3,7 +3,7 @@
 [![smithery badge](https://smithery.ai/badge/hlin2097/ftirfun)](https://smithery.ai/servers/hlin2097/ftirfun)
 [![MCP.so](https://img.shields.io/badge/MCP.so-listed-blue)](https://mcp.so/server/ftir-spectral-search/ftir_fun)
 
-MCP server for FTIR spectral-library search and material identification. Connects AI assistants to 135,000+ FTIR reference spectra with literature-backed peak assignments (DOI-cited).
+MCP server for FTIR spectral-library work and material identification. Connects AI assistants to 135,000+ FTIR reference spectra with hosted tools for unknown-spectrum analysis, peak explanation, reference-spectrum lookup, and historical-result fetch.
 
 ## Tools
 
@@ -22,25 +22,39 @@ Search the FTIR.fun spectral library for one unknown FTIR spectrum.
 
 **Returns:** Ranked candidate materials with library similarity scores, peak-by-peak explanations linked to published literature (DOI), confidence levels, and uncertainty disclosures.
 
-### `search`
+### `explain_peaks`
 
-Search public FTIR.fun result pages by keyword.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `query` | string | Yes | Search query string. |
-
-**Returns:** Matching public result pages with `id`, `url`, `title`, `text`, and metadata.
-
-### `fetch`
-
-Fetch one public FTIR.fun result document by ID.
+Explain one or more FTIR peaks without requiring a full library search.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `id` | string | Yes | Result ID in `result:<number>` format or bare number. |
+| `query` | string | No | Natural-language FTIR peak question, for example `"What does 1715 cm-1 indicate?"`. |
+| `peaks` | number[] | No | One or more FTIR peak positions in cm⁻¹. |
+| `sampling_mode` | string | No | Optional sampling mode such as `ATR` or `transmission`. |
 
-**Returns:** Full result document with `url`, `headline`, `summary`, `report_view`, and metadata.
+**Returns:** Structured peak explanations with supporting assignments and uncertainty wording when available.
+
+### `find_spectra`
+
+Find FTIR library reference spectra by substance name, CAS number, spectrum number, or keywords.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `query` | string | Yes | Substance name, CAS number, FTIR library `NUM`, or keywords. |
+| `limit` | integer | No | Number of reference spectra to return (1–20, default 10). |
+
+**Returns:** Matching reference spectra with `num`, names, CAS, peak markers, and library curve data.
+
+### `fetch_result`
+
+Fetch one historical FTIR.fun result by report number.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `result_num` | string | Yes | FTIR.fun report/result number. |
+| `language_code` | string | No | Display language for the stored result context, default `en`. |
+
+**Returns:** Structured historical result context with `report_url`, `headline`, `summary`, `report_view`, and `result_context`.
 
 ## Hosted MCP (Recommended)
 
@@ -65,11 +79,11 @@ One-line setup for Claude Code:
 claude mcp add ftirfun https://ftir.fun/mcp
 ```
 
-The hosted endpoint exposes all three tools (`analyze_ftir_spectrum`, `search`, `fetch`) and is the canonical production service.
+The hosted endpoint exposes four FTIR tools (`analyze_ftir_spectrum`, `explain_peaks`, `find_spectra`, `fetch_result`) and is the canonical production service.
 
 ## Self-Hosted (Local Wrapper)
 
-This repository provides a lightweight local MCP wrapper that proxies to the hosted API. The local wrapper exposes `analyze_ftir_spectrum` only.
+This repository provides a lightweight local MCP wrapper that proxies to the hosted API. The local wrapper exposes the same four FTIR tools as the hosted server.
 
 ### Configuration
 

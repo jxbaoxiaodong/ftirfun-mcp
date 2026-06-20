@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ftirfun-mcp"
-version = "0.1.0"
-description = "Public MCP wrapper for the hosted FTIR.fun spectral-library API."
+version = "1.0.2"
+description = "Public MCP wrapper for the hosted FTIR.fun FTIR API and MCP-compatible lookup tools."
 readme = "README.md"
 license = { file = "LICENSE" }
 authors = [

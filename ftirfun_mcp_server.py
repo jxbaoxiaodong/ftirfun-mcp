@@ -30,8 +30,9 @@ MAX_QUERY_PEAKS = 32
 mcp = FastMCP(
     "FTIR.fun Spectral Search",
     instructions=(
-        "Use this server only for FTIR spectral-library search and material screening. "
-        "It accepts FTIR peak lists, natural-language peak descriptions, or base64-encoded spectrum files. "
+        "Use this server only for FTIR spectral-library work. "
+        "It can analyze unknown spectra, explain peaks, find library reference spectra, "
+        "and fetch historical FTIR.fun results by report number. "
         "Results come from the hosted FTIR.fun API and are screening candidates, not accredited lab certification."
     ),
 )
@@ -39,6 +40,15 @@ mcp = FastMCP(
 
 READ_ONLY_ANALYSIS = ToolAnnotations(
     title="FTIR.fun read-only spectrum analysis",
+    readOnlyHint=True,
+    destructiveHint=False,
+    idempotentHint=True,
+    openWorldHint=False,
+)
+
+
+READ_ONLY_LOOKUP = ToolAnnotations(
+    title="FTIR.fun read-only lookup",
     readOnlyHint=True,
     destructiveHint=False,
     idempotentHint=True,
@@ -111,6 +121,107 @@ def _error(
     }
 
 
+def _api_headers() -> dict[str, str]:
+    return {
+        "X-API-Key": _api_key(),
+        "X-FTIRFUN-Client": "ftirfun-mcp-public-wrapper",
+    }
+
+
+def _request_json(
+    *,
+    method: str,
+    path: str,
+    json_body: dict[str, Any] | None = None,
+    params: dict[str, Any] | None = None,
+    timeout_hint: str | None = None,
+) -> dict[str, Any]:
+    api_key = _api_key()
+    if not api_key:
+        return _error(
+            "api_key_required",
+            f"Set {API_KEY_ENV} or {API_KEYS_ENV} before calling the hosted FTIR.fun API.",
+            recovery_suggestions=[
+                f"Set {API_KEY_ENV} in the MCP server environment.",
+                "Use the hosted FTIR.fun MCP endpoint if you already have a managed FTIR.fun integration.",
+            ],
+            retryable=False,
+        )
+
+    request_kwargs: dict[str, Any] = {
+        "headers": _api_headers(),
+        "timeout": _api_timeout_seconds(),
+    }
+    if json_body is not None:
+        request_kwargs["json"] = json_body
+    if params is not None:
+        request_kwargs["params"] = params
+
+    try:
+        response = httpx.request(
+            method,
+            f"{_api_base_url()}{path}",
+            **request_kwargs,
+        )
+    except httpx.TimeoutException:
+        suggestions = ["Retry later."]
+        if timeout_hint:
+            suggestions.append(timeout_hint)
+        return _error(
+            "upstream_timeout",
+            "The hosted FTIR.fun API did not respond before the configured timeout.",
+            recovery_suggestions=suggestions,
+            retryable=True,
+        )
+    except httpx.HTTPError as exc:
+        return _error(
+            "upstream_http_error",
+            "The MCP wrapper could not reach the hosted FTIR.fun API.",
+            recovery_suggestions=["Check network access to https://ftir.fun.", "Retry later."],
+            retryable=True,
+            details={"exception": exc.__class__.__name__},
+        )
+
+    if response.status_code == 429:
+        return _error(
+            "rate_limit_exceeded",
+            "The hosted FTIR.fun API returned HTTP 429.",
+            recovery_suggestions=[
+                "Wait before retrying.",
+                f"Retry-After: {response.headers.get('Retry-After', 'not provided')}",
+            ],
+            retryable=True,
+        )
+
+    try:
+        payload = response.json()
+    except ValueError:
+        return _error(
+            "invalid_upstream_response",
+            "The hosted FTIR.fun API returned a non-JSON response.",
+            recovery_suggestions=["Retry later.", "Contact FTIR.fun support if this repeats."],
+            retryable=True,
+            details={"status_code": response.status_code},
+        )
+
+    if response.status_code >= 400:
+        return _error(
+            "upstream_error",
+            "The hosted FTIR.fun API rejected the request.",
+            recovery_suggestions=payload.get("recovery_suggestions")
+            or ["Check the API key and input.", "Retry later if the response was a server error."],
+            retryable=bool(payload.get("retryable", response.status_code >= 500)),
+            details={"status_code": response.status_code, "upstream": payload},
+        )
+
+    payload["source"] = {
+        "service": "FTIR.fun",
+        "api_base_url": _api_base_url(),
+        "mcp_wrapper": "jxbaoxiaodong/ftirfun-mcp",
+    }
+    return payload
+
+
 @mcp.tool(
     annotations=READ_ONLY_ANALYSIS,
 )
@@ -162,18 +273,6 @@ def analyze_ftir_spectrum(
             retryable=False,
         )
 
-    api_key = _api_key()
-    if not api_key:
-        return _error(
-            "api_key_required",
-            f"Set {API_KEY_ENV} or {API_KEYS_ENV} before calling the hosted FTIR.fun API.",
-            recovery_suggestions=[
-                f"Set {API_KEY_ENV} in the MCP server environment.",
-                "Use the hosted FTIR.fun MCP endpoint if you already have a managed FTIR.fun integration.",
-            ],
-            retryable=False,
-        )
-
     body = {
         "spectrum": {
             "type": "ftir",
@@ -192,69 +291,121 @@ def analyze_ftir_spectrum(
         "file_base64": file_base64,
         "filename": filename,
     }
-    headers = {"X-API-Key": api_key, "X-FTIRFUN-Client": "ftirfun-mcp-public-wrapper"}
+    return _request_json(
+        method="POST",
+        path="/ftir/analyze_spectrum",
+        json_body=body,
+        timeout_hint=f"Increase {API_TIMEOUT_ENV} for large spectrum files.",
+    )
 
-    try:
-        response = httpx.post(
-            f"{_api_base_url()}/ftir/analyze_spectrum",
-            json=body,
-            headers=headers,
-            timeout=_api_timeout_seconds(),
-        )
-    except httpx.TimeoutException:
-        return _error(
-            "upstream_timeout",
-            "The hosted FTIR.fun API did not respond before the configured timeout.",
-            recovery_suggestions=["Retry later.", f"Increase {API_TIMEOUT_ENV} for large spectrum files."],
-            retryable=True,
-        )
-    except httpx.HTTPError as exc:
-        return _error(
-            "upstream_http_error",
-            "The MCP wrapper could not reach the hosted FTIR.fun API.",
-            recovery_suggestions=["Check network access to https://ftir.fun.", "Retry later."],
-            retryable=True,
-            details={"exception": exc.__class__.__name__},
-        )
 
-    if response.status_code == 429:
+@mcp.tool(
+    annotations=READ_ONLY_LOOKUP,
+)
+def explain_peaks(
+    query: Annotated[
+        str,
+        Field(
+            default="",
+            description="Natural-language FTIR peak question, for example 'What does 1715 cm-1 indicate?'",
+        ),
+    ] = "",
+    peaks: Annotated[
+        list[float] | None,
+        Field(default=None, description="One or more FTIR peak positions in cm-1."),
+    ] = None,
+    sampling_mode: Annotated[
+        str,
+        Field(default="", description="Optional sampling mode such as ATR or transmission."),
+    ] = "",
+) -> dict[str, Any]:
+    normalized_peaks = _normalized_peaks(peaks, query)
+    if not normalized_peaks and not str(query or "").strip():
         return _error(
-            "rate_limit_exceeded",
-            "The hosted FTIR.fun API returned HTTP 429.",
+            "missing_peak_input",
+            "Provide one or more FTIR peak positions or a peak question.",
             recovery_suggestions=[
-                "Wait before retrying.",
-                f"Retry-After: {response.headers.get('Retry-After', 'not provided')}",
+                "Pass peaks such as [1715] or [1715, 1450].",
+                "Or ask a natural-language question containing the peak number.",
             ],
-            retryable=True,
+            retryable=False,
         )
+    return _request_json(
+        method="POST",
+        path="/ftir/explain_peak_assignments",
+        json_body={
+            "peaks": normalized_peaks or None,
+            "query": str(query or "").strip() or None,
+            "sampling_mode": str(sampling_mode or "").strip(),
+        },
+    )
 
-    try:
-        payload = response.json()
-    except ValueError:
+
+@mcp.tool(
+    annotations=READ_ONLY_LOOKUP,
+)
+def find_spectra(
+    query: Annotated[
+        str,
+        Field(
+            ...,
+            description="Substance name, CAS number, FTIR library spectrum number, or keywords.",
+        ),
+    ],
+    limit: Annotated[
+        int,
+        Field(default=10, ge=1, le=20, description="Number of reference spectra to return."),
+    ] = 10,
+) -> dict[str, Any]:
+    normalized_query = str(query or "").strip()
+    if not normalized_query:
         return _error(
-            "invalid_upstream_response",
-            "The hosted FTIR.fun API returned a non-JSON response.",
-            recovery_suggestions=["Retry later.", "Contact FTIR.fun support if this repeats."],
-            retryable=True,
-            details={"status_code": response.status_code},
+            "missing_query",
+            "Provide a substance name, CAS number, spectrum number, or keywords.",
+            recovery_suggestions=[
+                "Try a material name such as 'polystyrene'.",
+                "Or use a CAS number or FTIR spectrum number.",
+            ],
+            retryable=False,
         )
+    return _request_json(
+        method="POST",
+        path="/ftir/find_spectra",
+        json_body={"query": normalized_query, "limit": int(limit)},
+    )
 
-    if response.status_code >= 400:
+
+@mcp.tool(
+    annotations=READ_ONLY_LOOKUP,
+)
+def fetch_result(
+    result_num: Annotated[
+        str,
+        Field(
+            ...,
+            description="Completed FTIR.fun result/report number.",
+        ),
+    ],
+    language_code: Annotated[
+        str,
+        Field(default="en", description="Language code for the stored result context."),
+    ] = "en",
+) -> dict[str, Any]:
+    normalized_result_num = str(result_num or "").strip()
+    if not normalized_result_num:
         return _error(
-            "upstream_error",
-            "The hosted FTIR.fun API rejected the request.",
-            recovery_suggestions=payload.get("recovery_suggestions")
-            or ["Check the API key and input spectrum.", "Retry later if the response was a server error."],
-            retryable=bool(payload.get("retryable", response.status_code >= 500)),
-            details={"status_code": response.status_code, "upstream": payload},
+            "missing_result_number",
+            "Provide a completed FTIR.fun result/report number.",
+            recovery_suggestions=[
+                "Pass the FTIR.fun result number returned by async tri-axis search.",
+            ],
+            retryable=False,
         )
-
-    payload["source"] = {
-        "service": "FTIR.fun",
-        "api_base_url": _api_base_url(),
-        "mcp_wrapper": "jxbaoxiaodong/ftirfun-mcp",
-    }
-    return payload
+    return _request_json(
+        method="GET",
+        path=f"/ftir/result/{normalized_result_num}",
+        params={"language_code": str(language_code or '').strip() or "en"},
+    )
 
 
 def main() -> None:
