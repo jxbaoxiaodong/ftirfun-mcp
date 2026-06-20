@@ -121,6 +121,20 @@ docker build -t ftirfun-mcp .
 docker run --rm -p 8001:8001 -e FTIRFUN_API_KEY="your-ftirfun-api-key" ftirfun-mcp
 ```
 
+### Push This Repo To GitHub
+
+This repo includes its own push helper:
+
+```bash
+bash push_github_main.sh origin main "your commit message"
+```
+
+Token resolution order:
+
+1. `GITHUB_ENV_FILE=/path/to/env`
+2. `./.env`
+3. shared fallback `/home/bob/projects/ftirfun/.env`
+
 For registry introspection, the server can start without an API key. Tool calls that require the hosted API return a structured `api_key_required` error until `FTIRFUN_API_KEY` is configured.
 
 ## Tool Boundary
