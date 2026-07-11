@@ -31,8 +31,8 @@ mcp = FastMCP(
     "FTIR.fun Spectral Search",
     instructions=(
         "Use this server only for FTIR spectral-library work. "
-        "It can analyze unknown spectra, explain peaks, find library reference spectra, "
-        "and fetch historical FTIR.fun results by report number. "
+        "It can parse instrument files, analyze unknown spectra, generate full tri-axis reports, "
+        "explain peaks, find library reference spectra, and fetch historical FTIR.fun results. "
         "Results come from the hosted FTIR.fun API and are screening candidates, not accredited lab certification."
     ),
 )
@@ -52,6 +52,15 @@ READ_ONLY_LOOKUP = ToolAnnotations(
     readOnlyHint=True,
     destructiveHint=False,
     idempotentHint=True,
+    openWorldHint=False,
+)
+
+
+REPORT_SUBMISSION = ToolAnnotations(
+    title="FTIR.fun full report submission",
+    readOnlyHint=False,
+    destructiveHint=False,
+    idempotentHint=False,
     openWorldHint=False,
 )
 
@@ -225,6 +234,35 @@ def _request_json(
 @mcp.tool(
     annotations=READ_ONLY_ANALYSIS,
 )
+def parse_ftir_spectrum(
+    file_base64: Annotated[
+        str,
+        Field(..., description="Base64-encoded FTIR spectrum file content."),
+    ],
+    filename: Annotated[
+        str,
+        Field(default="spectrum.0", description="Original instrument filename for format detection."),
+    ] = "spectrum.0",
+) -> dict[str, Any]:
+    """Parse a supported FTIR instrument file into curve points and detected peaks."""
+    if not str(file_base64 or "").strip():
+        return _error(
+            "missing_spectrum_input",
+            "Provide a base64-encoded FTIR spectrum file.",
+            recovery_suggestions=["Pass file_base64 with the original filename."],
+            retryable=False,
+        )
+    return _request_json(
+        method="POST",
+        path="/parse-spectrum",
+        json_body={"file_base64": file_base64, "filename": filename},
+        timeout_hint=f"Increase {API_TIMEOUT_ENV} for large spectrum files.",
+    )
+
+
+@mcp.tool(
+    annotations=READ_ONLY_ANALYSIS,
+)
 def analyze_ftir_spectrum(
     query: Annotated[
         str,
@@ -300,6 +338,99 @@ def analyze_ftir_spectrum(
 
 
 @mcp.tool(
+    annotations=REPORT_SUBMISSION,
+)
+def submit_ftir_report(
+    file_base64: Annotated[
+        str,
+        Field(..., description="Base64-encoded FTIR spectrum file for the full tri-axis report workflow."),
+    ],
+    filename: Annotated[
+        str,
+        Field(default="spectrum.0", description="Original instrument filename for format detection."),
+    ] = "spectrum.0",
+    sampling_mode: Annotated[
+        str,
+        Field(default="", description="Optional FTIR sampling mode such as ATR, Thin Film, or KBr Pellet."),
+    ] = "",
+    prior_context: Annotated[
+        str,
+        Field(default="", description="Optional known sample background for evidence comparison."),
+    ] = "",
+    language_code: Annotated[
+        str,
+        Field(default="en", description="Requested report language code."),
+    ] = "en",
+    sample_name: Annotated[
+        str,
+        Field(default="", description="Optional sample name shown in the report."),
+    ] = "",
+    sample_order_no: Annotated[
+        str,
+        Field(default="", description="Optional sample or order number shown in the report."),
+    ] = "",
+) -> dict[str, Any]:
+    """Queue the complete FTIR.fun tri-axis workflow and final structured report."""
+    if not str(file_base64 or "").strip():
+        return _error(
+            "missing_spectrum_input",
+            "Provide a base64-encoded FTIR spectrum file.",
+            recovery_suggestions=["Pass file_base64 with the original filename."],
+            retryable=False,
+        )
+    return _request_json(
+        method="POST",
+        path="/ftir/reports",
+        json_body={
+            "file_base64": file_base64,
+            "filename": filename,
+            "sampling_mode": sampling_mode,
+            "prior_context": prior_context,
+            "language_code": language_code,
+            "sample_name": sample_name,
+            "sample_order_no": sample_order_no,
+        },
+        timeout_hint=f"Increase {API_TIMEOUT_ENV} for large spectrum files.",
+    )
+
+
+@mcp.tool(
+    annotations=READ_ONLY_LOOKUP,
+)
+def get_ftir_report_status(
+    task_id: Annotated[
+        str,
+        Field(..., description="Task identifier returned by submit_ftir_report."),
+    ],
+    language_code: Annotated[
+        str,
+        Field(default="en", description="Requested language for the completed report payload."),
+    ] = "en",
+    include_report: Annotated[
+        bool,
+        Field(default=True, description="Attach the structured report after completion."),
+    ] = True,
+) -> dict[str, Any]:
+    """Poll an owned report task and return its completed structured report."""
+    normalized_task_id = str(task_id or "").strip()
+    if not normalized_task_id:
+        return _error(
+            "missing_task_id",
+            "Provide the task_id returned by submit_ftir_report.",
+            recovery_suggestions=["Submit a report first, then pass its task_id."],
+            retryable=False,
+        )
+    return _request_json(
+        method="GET",
+        path=f"/ftir/reports/{normalized_task_id}",
+        params={
+            "language_code": str(language_code or "").strip() or "en",
+            "include_report": bool(include_report),
+        },
+    )
+
+
+@mcp.tool(
     annotations=READ_ONLY_LOOKUP,
 )
 def explain_peaks(
@@ -316,7 +447,7 @@ def explain_peaks(
     ] = None,
     sampling_mode: Annotated[
         str,
-        Field(default="", description="Optional sampling mode such as ATR or transmission."),
+        Field(default="", description="Optional sampling mode such as ATR, Thin Film, or KBr Pellet."),
     ] = "",
 ) -> dict[str, Any]:
     normalized_peaks = _normalized_peaks(peaks, query)

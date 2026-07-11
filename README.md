@@ -3,9 +3,13 @@
 [![smithery badge](https://smithery.ai/badge/hlin2097/ftirfun)](https://smithery.ai/servers/hlin2097/ftirfun)
 [![MCP.so](https://img.shields.io/badge/MCP.so-listed-blue)](https://mcp.so/server/ftir-spectral-search/ftir_fun)
 
-MCP server for FTIR spectral-library work and material identification. Connects AI assistants to 135,000+ FTIR reference spectra with hosted tools for unknown-spectrum analysis, peak explanation, reference-spectrum lookup, and historical-result fetch.
+MCP server for FTIR spectral-library work and material identification. Connects AI assistants to 135,000+ FTIR reference spectra with hosted tools for instrument-file parsing, unknown-spectrum analysis, full tri-axis reports, peak explanation, reference-spectrum lookup, and historical-result fetch.
 
 ## Tools
+
+### `parse_ftir_spectrum`
+
+Parse a base64-encoded FTIR instrument file into aligned curve points and detected peaks.
 
 ### `analyze_ftir_spectrum`
 
@@ -22,6 +26,14 @@ Search the FTIR.fun spectral library for one unknown FTIR spectrum.
 
 **Returns:** Ranked candidate materials with library similarity scores, peak-by-peak explanations linked to published literature (DOI), confidence levels, and uncertainty disclosures.
 
+### `submit_ftir_report`
+
+Submit a base64-encoded spectrum file to the existing full FTIR.fun tri-axis workflow. Returns `task_id` and `result_num`.
+
+### `get_ftir_report_status`
+
+Poll the `task_id` returned by `submit_ftir_report`. When complete, the response includes the same structured `report_view` used by the FTIR.fun website and the final `report_url`.
+
 ### `explain_peaks`
 
 Explain one or more FTIR peaks without requiring a full library search.
@@ -30,7 +42,7 @@ Explain one or more FTIR peaks without requiring a full library search.
 |-----------|------|----------|-------------|
 | `query` | string | No | Natural-language FTIR peak question, for example `"What does 1715 cm-1 indicate?"`. |
 | `peaks` | number[] | No | One or more FTIR peak positions in cm⁻¹. |
-| `sampling_mode` | string | No | Optional sampling mode such as `ATR` or `transmission`. |
+| `sampling_mode` | string | No | Optional sampling mode such as `ATR`, `Thin Film`, or `KBr Pellet`. |
 
 **Returns:** Structured peak explanations with supporting assignments and uncertainty wording when available.
 
@@ -60,18 +72,31 @@ Fetch one historical FTIR.fun result by report number.
 
 Connect directly to the production endpoint — no local install required:
 
+For VS Code, use `.vscode/mcp.json` or the user-level MCP configuration:
+
 ```json
 {
-  "mcpServers": {
+  "inputs": [
+    {
+      "type": "promptString",
+      "id": "ftirfun-api-key",
+      "description": "FTIR.fun API key",
+      "password": true
+    }
+  ],
+  "servers": {
     "ftirfun": {
+      "type": "http",
       "url": "https://ftir.fun/mcp",
       "headers": {
-        "Authorization": "Bearer <YOUR_FTIRFUN_API_KEY>"
+        "Authorization": "Bearer ${input:ftirfun-api-key}"
       }
     }
   }
 }
 ```
+
+This is direct Bearer API-key authentication. FTIR.fun does not use OAuth dynamic client registration or an `/authorize` page. Do not use the nonexistent `@ftirfun/mcp-server` npm package; the hosted URL needs no local install.
 
 One-line setup for Claude Code:
 
@@ -79,11 +104,11 @@ One-line setup for Claude Code:
 claude mcp add ftirfun https://ftir.fun/mcp
 ```
 
-The hosted endpoint exposes four FTIR tools (`analyze_ftir_spectrum`, `explain_peaks`, `find_spectra`, `fetch_result`) and is the canonical production service.
+The hosted endpoint exposes seven FTIR tools (`parse_ftir_spectrum`, `analyze_ftir_spectrum`, `submit_ftir_report`, `get_ftir_report_status`, `explain_peaks`, `find_spectra`, `fetch_result`) and is the canonical production service.
 
 ## Self-Hosted (Local Wrapper)
 
-This repository provides a lightweight local MCP wrapper that proxies to the hosted API. The local wrapper exposes the same four FTIR tools as the hosted server.
+This repository provides a lightweight local MCP wrapper that proxies to the hosted API. The local wrapper exposes the same seven FTIR tools as the hosted server.
 
 ### Configuration
 
