@@ -8,6 +8,18 @@
 
 MCP server and REST API client for **[FTIR.fun](https://ftir.fun)** — gives AI assistants and code pipelines direct access to 130,000+ FTIR infrared reference spectra for material identification, peak explanation, and spectral library search.
 
+## Available Tools at a Glance
+
+| Tool | What it does |
+|------|-------------|
+| [`analyze_ftir_spectrum`](#analyze_ftir_spectrum) | Identify an unknown FTIR spectrum — accepts peaks, natural-language query, or an instrument file (28+ formats). Returns ranked matches with similarity scores and literature DOI. |
+| [`explain_peaks`](#explain_peaks) | Explain one or more infrared peak positions — functional-group assignment without a full library search. |
+| [`parse_ftir_spectrum`](#parse_ftir_spectrum) | Parse a raw FTIR instrument file into wavenumber-intensity data points and detected peaks. |
+| [`find_spectra`](#find_spectra) | Search the 130,000+ reference library by substance name, CAS number, or keywords. Returns curve data for comparison. |
+| [`submit_ftir_report`](#submit_ftir_report) | Submit a spectrum to the full tri-axis identification workflow (same multi-stage analysis as the website). |
+| [`get_ftir_report_status`](#get_ftir_report_status) | Poll report progress; returns the complete structured result and a shareable URL when done. |
+| [`fetch_result`](#fetch_result) | Retrieve any historical FTIR.fun analysis result by report number. |
+
 ---
 
 ## Get an API Key

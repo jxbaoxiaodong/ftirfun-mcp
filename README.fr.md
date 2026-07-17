@@ -6,25 +6,19 @@
 [![MCP.so](https://img.shields.io/badge/MCP.so-listed-blue)](https://mcp.so/server/ftir-spectral-search/ftir_fun)
 [![PyPI](https://img.shields.io/pypi/v/ftirfun-mcp)](https://pypi.org/project/ftirfun-mcp/)
 
-Serveur MCP et client REST pour **[FTIR.fun](https://ftir.fun)** — plateforme en ligne de spectrométrie infrarouge et d'identification de matériaux.
+Serveur MCP et client REST pour **[FTIR.fun](https://ftir.fun)** — donne aux assistants IA et pipelines de code un accès direct à plus de 130 000 spectres FTIR infrarouges de référence pour l'identification de matériaux, l'explication de pics et la recherche dans la bibliothèque spectrale.
 
----
+## Outils disponibles
 
-## Qu'est-ce que FTIR.fun ?
-
-**[FTIR.fun](https://ftir.fun)** est une plateforme cloud d'analyse par spectrométrie infrarouge, utilisée par des chercheurs et ingénieurs dans plus de 52 pays. Elle donne accès à une bibliothèque constamment mise à jour de **plus de 130 000 spectres FTIR de référence**, couvrant les polymères, les additifs, les revêtements, les excipients pharmaceutiques et les produits chimiques industriels.
-
-Fonctionnalités principales sur [ftir.fun](https://ftir.fun) :
-
-- **Recherche dans la bibliothèque spectrale** — déposez un fichier instrument ou saisissez des positions de pics ; obtenez des correspondances classées avec scores de similarité et citations DOI
-- **Explication des pics par IA** — interrogez n'importe quel nombre d'onde ; recevez des attributions de groupes fonctionnels appuyées sur un graphe de connaissances chimiques
-- **Rapport tri-axial complet** — identification automatique multi-étapes avec URL de résultat partageable
-- **Extraction image vers CSV** — numérisez une courbe spectrale depuis une figure publiée
-- **Atelier de formulation** — déformulation multi-composants et analyse de mélanges inconnus
-
-Ce package permet à votre assistant IA (Claude, Cursor, VS Code Copilot, Gemini CLI…) ou à votre pipeline de code d'appeler FTIR.fun directement, sans changer de navigateur.
-
-**Guides de configuration pas à pas et documentation API :** https://ftir.fun/ai-integration/
+| Outil | Fonction |
+|-------|----------|
+| [`analyze_ftir_spectrum`](#analyze_ftir_spectrum) | Identifier un spectre FTIR inconnu — accepte des pics, une requête en langage naturel ou un fichier instrument (28+ formats). Retourne des correspondances classées avec scores et DOI. |
+| [`explain_peaks`](#explain_peaks) | Expliquer un ou plusieurs pics infrarouges — attribution de groupes fonctionnels sans recherche complète. |
+| [`parse_ftir_spectrum`](#parse_ftir_spectrum) | Analyser un fichier instrument FTIR brut en points de données et pics détectés. |
+| [`find_spectra`](#find_spectra) | Rechercher dans la bibliothèque de 130 000+ spectres par nom, CAS ou mots-clés. Retourne les données de courbe. |
+| [`submit_ftir_report`](#submit_ftir_report) | Soumettre un spectre au workflow tri-axial complet (même analyse multi-étapes que le site). |
+| [`get_ftir_report_status`](#get_ftir_report_status) | Interroger la progression du rapport ; retourne le résultat structuré et l'URL partageable. |
+| [`fetch_result`](#fetch_result) | Récupérer un résultat historique FTIR.fun par numéro de rapport. |
 
 ---
 
@@ -33,8 +27,6 @@ Ce package permet à votre assistant IA (Claude, Cursor, VS Code Copilot, Gemini
 1. Connectez-vous sur [ftir.fun](https://ftir.fun) — les nouveaux comptes incluent des crédits d'essai gratuits.
 2. Accédez à **Compte → Clés API** et cliquez sur **Générer**.
 3. Copiez la clé immédiatement (commence par `ftir_` ; affichée une seule fois).
-
-L'authentification utilise un seul en-tête — sans OAuth, sans redirection navigateur :
 
 ```
 # Pour MCP (hébergé)
@@ -46,93 +38,117 @@ X-API-Key: ftir_your_key_here
 
 ---
 
-## MCP Hébergé (Recommandé)
+## Outils MCP
 
-Connectez-vous directement au point de terminaison de production — aucune installation locale requise.
+Le point de terminaison MCP hébergé `https://ftir.fun/mcp` expose sept outils.
 
-### VS Code (mode Agent GitHub Copilot)
+---
 
-Créez `.vscode/mcp.json` dans votre projet :
+### `analyze_ftir_spectrum`
 
-```json
-{
-  "inputs": [
-    {
-      "type": "promptString",
-      "id": "ftirfun-api-key",
-      "description": "FTIR.fun API key",
-      "password": true
-    }
-  ],
-  "servers": {
-    "ftirfun": {
-      "type": "http",
-      "url": "https://ftir.fun/mcp",
-      "headers": {
-        "Authorization": "Bearer ${input:ftirfun-api-key}"
-      }
-    }
-  }
-}
+Rechercher des correspondances dans la bibliothèque spectrale FTIR pour un spectre inconnu.
+
+**Paramètres**
+
+| Paramètre | Type | Requis | Description |
+|-----------|------|--------|-------------|
+| `query` | string | Non | Requête FTIR en langage naturel — les positions de pics sont extraites automatiquement. |
+| `peaks` | number[] | Non | Positions de pics FTIR en cm⁻¹ (ex. `[1736, 1379, 1241]`). |
+| `file_base64` | string | Non | Fichier instrument FTIR encodé en base64. Supporte 28+ formats. |
+| `filename` | string | Non | Nom de fichier original pour la détection de format. |
+| `top_k` | integer | Non | Nombre de candidats à retourner (1–50, défaut 15). |
+| `tolerance_cm1` | integer | Non | Tolérance de correspondance en cm⁻¹ (1–30, défaut 8). |
+
+**Retourne :** Matériaux candidats classés avec scores de similarité, preuves par pic (DOI), et niveaux de confiance.
+
+**Exemple**
+```
+Identifie ce spectre infrarouge : pics à 2915, 1715, 1450, 1260, 1090 cm-1.
 ```
 
-### Claude Desktop / Claude Code
+---
 
-```
-URL :    https://ftir.fun/mcp
-En-tête : Authorization: Bearer ftir_your_key_here
-```
+### `explain_peaks`
 
-Configuration en une ligne pour **Claude Code** :
+Expliquer un ou plusieurs pics infrarouges FTIR sans recherche complète.
 
-```bash
-claude mcp add --transport http ftirfun https://ftir.fun/mcp \
-  --header "Authorization: Bearer ftir_your_key_here"
-```
+**Paramètres**
 
-### Cursor
+| Paramètre | Type | Requis | Description |
+|-----------|------|--------|-------------|
+| `query` | string | Non | Question sur les pics en langage naturel. |
+| `peaks` | number[] | Non | Une ou plusieurs positions de pics en cm⁻¹. |
+| `sampling_mode` | string | Non | `ATR`, `Thin Film`, `KBr Pellet`, etc. |
 
-Créez ou éditez `~/.cursor/mcp.json` :
+---
 
-```json
-{
-  "mcpServers": {
-    "ftirfun": {
-      "url": "https://ftir.fun/mcp",
-      "headers": { "Authorization": "Bearer ftir_your_key_here" }
-    }
-  }
-}
-```
+### `parse_ftir_spectrum`
 
-### Gemini CLI
+Analyser un fichier instrument FTIR encodé en base64 en points de courbe alignés et pics détectés.
 
-Éditez `~/.gemini/settings.json` :
+**Paramètres**
 
-```json
-{
-  "mcpServers": {
-    "ftirfun": {
-      "httpUrl": "https://ftir.fun/mcp",
-      "headers": { "Authorization": "Bearer ftir_your_key_here" }
-    }
-  }
-}
-```
+| Paramètre | Type | Requis | Description |
+|-----------|------|--------|-------------|
+| `file_base64` | string | Oui | Fichier FTIR encodé en base64. |
+| `filename` | string | Oui | Nom de fichier original. |
 
-### Prompts de test
+---
 
-```
-Utilise FTIR.fun pour expliquer le pic FTIR à 1715 cm-1.
-Identifie ce polymère à partir de ses pics FTIR : 2915, 1715, 1450 cm-1.
-Recherche des spectres de référence de polypropylène dans FTIR.fun.
-```
+### `find_spectra`
+
+Trouver des spectres FTIR de référence par nom, CAS ou mots-clés.
+
+**Paramètres**
+
+| Paramètre | Type | Requis | Description |
+|-----------|------|--------|-------------|
+| `query` | string | Oui | Nom de substance, CAS, `NUM`, ou mots-clés. |
+| `limit` | integer | Non | Nombre de résultats (1–20, défaut 10). |
+
+---
+
+### `submit_ftir_report`
+
+Soumettre un spectre au workflow tri-axial complet. Retourne `task_id` et `result_num`.
+
+**Paramètres**
+
+| Paramètre | Type | Requis | Description |
+|-----------|------|--------|-------------|
+| `file_base64` | string | Oui | Fichier FTIR encodé en base64. |
+| `filename` | string | Oui | Nom de fichier original. |
+
+---
+
+### `get_ftir_report_status`
+
+Interroger le statut d'un rapport soumis. Retourne `report_view` et `report_url` une fois terminé.
+
+**Paramètres**
+
+| Paramètre | Type | Requis | Description |
+|-----------|------|--------|-------------|
+| `task_id` | string | Oui | `task_id` retourné par `submit_ftir_report`. |
+
+---
+
+### `fetch_result`
+
+Récupérer un résultat historique FTIR.fun par numéro de rapport.
+
+**Paramètres**
+
+| Paramètre | Type | Requis | Description |
+|-----------|------|--------|-------------|
+| `result_num` | string | Oui | Numéro de rapport FTIR.fun. |
+| `language_code` | string | Non | Langue d'affichage (défaut `en`). |
 
 ---
 
 ## API REST
 
-Appelez FTIR.fun depuis n'importe quel langage — Python, JavaScript, R, MATLAB, Go.
+Appelez FTIR.fun depuis n'importe quel langage — Python, JavaScript, R, MATLAB, Go. Idéal pour les intégrations LIMS, le traitement par lots de spectres infrarouges, ou l'ajout de recherche spectrale à votre application.
 
 Référence complète : https://ftir.fun/api-docs/
 
@@ -143,7 +159,7 @@ curl https://ftir.fun/health
 # → {"status":"ok","service":"ftirfun-api"}
 ```
 
-### Identifier un spectre inconnu — pics
+### Identifier un spectre infrarouge inconnu — pics
 
 ```bash
 curl -X POST https://ftir.fun/ftir/analyze_spectrum \
@@ -179,21 +195,56 @@ resp = requests.post(
 print(resp.json())
 ```
 
-Supporte 28+ formats : Thermo `.spa`/`.spc`, Bruker `.opus`, PerkinElmer `.sp`, JCAMP-DX, CSV, Excel, etc.
+### Expliquer des pics infrarouges
+
+```bash
+curl -X POST https://ftir.fun/ftir/explain_peaks \
+  -H "X-API-Key: ftir_your_key_here" \
+  -H "Content-Type: application/json" \
+  -d '{"peaks": [1715, 2915], "sampling_mode": "ATR"}'
+```
 
 ---
 
-## Outils (Tools)
+## Configuration client MCP
 
-| Outil | Description |
-|-------|-------------|
-| `parse_ftir_spectrum` | Analyse un fichier instrument encodé en base64 |
-| `analyze_ftir_spectrum` | Recherche des correspondances pour un spectre inconnu |
-| `submit_ftir_report` | Soumet un spectre au workflow tri-axial complet |
-| `get_ftir_report_status` | Interroge l'état d'un rapport soumis |
-| `explain_peaks` | Explique un ou plusieurs pics sans recherche complète |
-| `find_spectra` | Trouve des spectres de référence par nom, CAS ou mots-clés |
-| `fetch_result` | Récupère un résultat historique par numéro de rapport |
+URL : `https://ftir.fun/mcp` avec token `Bearer`. Aucune installation locale requise.
+
+### VS Code
+
+```json
+{
+  "inputs": [
+    { "type": "promptString", "id": "ftirfun-api-key", "description": "FTIR.fun API key", "password": true }
+  ],
+  "servers": {
+    "ftirfun": {
+      "type": "http",
+      "url": "https://ftir.fun/mcp",
+      "headers": { "Authorization": "Bearer ${input:ftirfun-api-key}" }
+    }
+  }
+}
+```
+
+### Claude Code
+
+```bash
+claude mcp add --transport http ftirfun https://ftir.fun/mcp \
+  --header "Authorization: Bearer ftir_your_key_here"
+```
+
+### Cursor
+
+```json
+{ "mcpServers": { "ftirfun": { "url": "https://ftir.fun/mcp", "headers": { "Authorization": "Bearer ftir_your_key_here" } } } }
+```
+
+### Gemini CLI
+
+```json
+{ "mcpServers": { "ftirfun": { "httpUrl": "https://ftir.fun/mcp", "headers": { "Authorization": "Bearer ftir_your_key_here" } } } }
+```
 
 ---
 
@@ -207,6 +258,22 @@ ftirfun-mcp
 
 ---
 
+## À propos de FTIR.fun
+
+**[FTIR.fun](https://ftir.fun)** est une plateforme cloud d'analyse par spectrométrie infrarouge, utilisée par des chercheurs et ingénieurs dans plus de 52 pays. Elle donne accès à une bibliothèque constamment mise à jour de **plus de 130 000 spectres FTIR de référence**.
+
+Fonctionnalités sur [ftir.fun](https://ftir.fun) :
+
+- **Recherche dans la bibliothèque spectrale** — correspondances classées avec scores et citations DOI
+- **Explication des pics par IA** — groupes fonctionnels via graphe de connaissances chimiques
+- **Rapport tri-axial complet** — identification multi-étapes avec URL partageable
+- **Extraction image vers CSV** — numérisation de courbes spectrales
+- **Atelier de formulation** — déformulation multi-composants
+
+Guides de configuration : https://ftir.fun/ai-integration/
+
+---
+
 ## Liens
 
 | Ressource | URL |
@@ -214,6 +281,8 @@ ftirfun-mcp
 | Site web | https://ftir.fun |
 | Guide de configuration | https://ftir.fun/ai-integration/ |
 | Documentation API | https://ftir.fun/api-docs/ |
-| Point de terminaison MCP | https://ftir.fun/mcp |
+| Endpoint MCP | https://ftir.fun/mcp |
+| Server card | https://ftir.fun/.well-known/mcp/server-card.json |
 | Smithery | https://smithery.ai/servers/hlin2097/ftirfun |
+| MCP.so | https://mcp.so/server/ftir-spectral-search/ftir_fun |
 | PyPI | https://pypi.org/project/ftirfun-mcp/ |
